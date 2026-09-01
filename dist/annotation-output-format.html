@@ -1,0 +1,1520 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>JSON 输出格式可视化配置器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              ink: "#152033",
+              line: "#d8dee8",
+              brand: "#2563eb",
+              soft: "#f6f8fb",
+              panel: "#ffffff",
+              mint: "#0f9f86"
+            },
+            boxShadow: {
+              shell: "0 16px 40px rgba(21, 32, 51, 0.08)"
+            }
+          }
+        }
+      };
+    </script>
+    <style>
+      body {
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", "Microsoft YaHei", sans-serif;
+        background:
+          linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+        color: #152033;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      .scrollbar-thin::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+
+      .scrollbar-thin::-webkit-scrollbar-thumb {
+        background: #c7d0de;
+        border-radius: 999px;
+      }
+
+      .scrollbar-thin::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      .tree-line {
+        position: relative;
+      }
+
+      .tree-line::before {
+        content: "";
+        position: absolute;
+        left: 14px;
+        top: 34px;
+        bottom: 0;
+        width: 1px;
+        background: #e3e8f0;
+      }
+
+      .tree-line:last-child::before {
+        display: none;
+      }
+
+      .code-block {
+        font-family:
+          "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      }
+
+      .drag-target {
+        outline: 2px dashed #2563eb;
+        outline-offset: -2px;
+      }
+    </style>
+  
+  <style>
+    body { background: #f5f7fb !important; color: #1e293b !important; }
+    header { border-color: #e1e8f0 !important; background: #ffffff !important; box-shadow: 0 1px 0 rgba(15, 23, 42, .03); }
+    header > div:first-child { background: #f5f7fb !important; padding: 12px 14px 8px !important; }
+    header > div:first-child > div { border-color: #e1e8f0 !important; background: #ffffff !important; box-shadow: 0 8px 24px rgba(15, 23, 42, .06) !important; }
+    header > div:first-child > div > div:first-child { color: #475569 !important; }
+    header > div:first-child > div > div:last-child > div { border-color: #e2e8f0 !important; background: #f8fafc !important; color: #94a3b8 !important; }
+    header > div:first-child > div > div:last-child > div:last-child { border-color: #bfdbfe !important; background: #eff6ff !important; color: #2563eb !important; box-shadow: inset 3px 0 0 #2563eb !important; }
+    header > div:nth-child(2) { min-height: 56px !important; border-top: 1px solid #eef2f7; }
+    .fixed.bottom-4.right-4 { top: auto !important; right: 16px !important; bottom: 16px !important; left: auto !important; z-index: 50 !important; border-color: #e1e8f0 !important; box-shadow: 0 12px 32px rgba(15, 23, 42, .12) !important; transform: none !important; }
+    .fixed.right-5.top-20 { top: 16px !important; right: auto !important; bottom: auto !important; left: 50% !important; z-index: 2147483647 !important; border-color: #e1e8f0 !important; box-shadow: 0 12px 32px rgba(15, 23, 42, .12) !important; transform: translateX(-50%) !important; }
+  </style></head>
+  <body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const { useEffect, useMemo, useState } = React;
+
+      const FIELD_TYPES = [
+        "string",
+        "number",
+        "boolean",
+        "object",
+        "array",
+        "enum",
+        "bbox",
+        "point",
+        "polygon",
+        "date",
+        "time"
+      ];
+
+      const sceneComponents = [
+        {
+          id: "video",
+          name: "视频播放器组件",
+          tag: "媒体",
+          fields: [
+            { key: "video_id", label: "video_id", type: "string", sample: "vid_20260629_001" },
+            { key: "video_url", label: "video_url", type: "string", sample: "https://cdn.example.com/video.mp4" },
+            { key: "duration", label: "duration", type: "number", sample: 128.6 },
+            { key: "fps", label: "fps", type: "number", sample: 30 }
+          ]
+        },
+        {
+          id: "segment",
+          name: "时间轴片段组件",
+          tag: "时间轴",
+          fields: [
+            { key: "segment_id", label: "segment_id", type: "string", sample: "seg_001" },
+            { key: "start_time", label: "start_time", type: "number", sample: 12.4 },
+            { key: "end_time", label: "end_time", type: "number", sample: 18.2 },
+            { key: "segment_label", label: "segment_label", type: "string", sample: "关键动作片段" }
+          ]
+        },
+        {
+          id: "event",
+          name: "事件标注组件",
+          tag: "事件",
+          fields: [
+            { key: "event_type", label: "event_type", type: "enum", sample: "goal" },
+            { key: "event_description", label: "event_description", type: "string", sample: "球员完成射门" },
+            { key: "confidence", label: "confidence", type: "number", sample: 0.94 }
+          ]
+        },
+        {
+          id: "object",
+          name: "目标框组件",
+          tag: "视觉",
+          fields: [
+            { key: "object_id", label: "object_id", type: "string", sample: "obj_274" },
+            { key: "label", label: "label", type: "enum", sample: "person" },
+            { key: "bbox", label: "bbox", type: "bbox", sample: { x: 126, y: 84, width: 228, height: 320 } },
+            { key: "track_id", label: "track_id", type: "string", sample: "trk_08" }
+          ]
+        },
+        {
+          id: "text",
+          name: "文本描述组件",
+          tag: "文本",
+          fields: [
+            { key: "summary", label: "summary", type: "string", sample: "视频展示了完整事件过程。" },
+            { key: "caption", label: "caption", type: "string", sample: "运动员在禁区内起脚射门。" }
+          ]
+        },
+        {
+          id: "qa",
+          name: "问答组件",
+          tag: "问答",
+          fields: [
+            { key: "question", label: "question", type: "string", sample: "视频中发生了什么事件？" },
+            { key: "answer", label: "answer", type: "string", sample: "一名球员完成射门。" }
+          ]
+        }
+      ];
+
+      const componentMap = sceneComponents.reduce((acc, group) => {
+        group.fields.forEach((field) => {
+          acc[`${group.id}.${field.key}`] = {
+            componentId: group.id,
+            componentName: group.name,
+            fieldKey: field.key,
+            fieldLabel: field.label,
+            type: field.type,
+            sample: field.sample
+          };
+        });
+        return acc;
+      }, {});
+
+      const makeDefaultTableColumns = () => [
+        { id: "col_data_id", name: "字段数据ID", type: "string", required: true, exportable: true, componentId: "", fieldKey: "", description: "每条字段数据的唯一标识", system: true },
+        { id: "col_sequence", name: "序号", type: "number", required: true, exportable: true, componentId: "", fieldKey: "", description: "数据输出顺序", system: true },
+        { id: "col_video_id", name: "video_id", type: "string", required: true, exportable: true, componentId: "video", fieldKey: "video_id", description: "视频数据主键" },
+        { id: "col_video_url", name: "video_url", type: "string", required: true, exportable: true, componentId: "video", fieldKey: "video_url", description: "视频资源地址" },
+        { id: "col_event_type", name: "event_type", type: "enum", required: true, exportable: true, componentId: "event", fieldKey: "event_type", description: "事件标签" },
+        { id: "col_start_time", name: "start_time", type: "number", required: false, exportable: true, componentId: "segment", fieldKey: "start_time", description: "片段开始时间" },
+        { id: "col_summary", name: "summary", type: "string", required: false, exportable: true, componentId: "text", fieldKey: "summary", description: "标注摘要" }
+      ];
+
+      const ensureTableSystemColumns = (columns = []) => {
+        const requiredColumns = makeDefaultTableColumns().slice(0, 2);
+        const existing = Array.isArray(columns) ? columns : [];
+        const missing = requiredColumns.filter((required) => !existing.some((column) => column.id === required.id || column.name === required.name));
+        return [...missing, ...existing];
+      };
+      const createTableColumn = (source) => ({
+        id: `col_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        name: source?.fieldKey || "new_field",
+        type: source?.type || "string",
+        required: false,
+        exportable: true,
+        componentId: source?.componentId || "",
+        fieldKey: source?.fieldKey || "",
+        description: ""
+      });
+      const createNode = ({
+        name,
+        type = "string",
+        required = true,
+        nullable = false,
+        description = "",
+        componentId = "",
+        fieldKey = "",
+        alias = "",
+        defaultValue = "",
+        enumValues = [],
+        validations = "",
+        exampleValue = "",
+        exportable = true,
+        children = []
+      }) => ({
+        id: crypto.randomUUID(),
+        name,
+        type,
+        required,
+        nullable,
+        description,
+        componentId,
+        fieldKey,
+        alias,
+        defaultValue,
+        enumValues,
+        validations,
+        exampleValue,
+        exportable,
+        collapsed: false,
+        children
+      });
+
+      const makeBoundNode = (source, overrides = {}) =>
+        createNode({
+          name: source.fieldKey,
+          type: source.type,
+          description: `来源于${source.componentName}.${source.fieldLabel}`,
+          componentId: source.componentId,
+          fieldKey: source.fieldKey,
+          exampleValue:
+            typeof source.sample === "object" ? JSON.stringify(source.sample) : String(source.sample),
+          enumValues: source.type === "enum" ? ["goal", "foul", "shot", "pass"] : [],
+          ...overrides
+        });
+
+      const makeRecommendedTree = () => {
+        const source = (id) => componentMap[id];
+        return createNode({
+          name: "root",
+          type: "object",
+          required: true,
+          exportable: true,
+          children: [
+            createNode({
+              name: "video_info",
+              type: "object",
+              description: "视频基础信息",
+              children: [
+                makeBoundNode(source("video.video_id")),
+                makeBoundNode(source("video.video_url")),
+                makeBoundNode(source("video.duration")),
+                makeBoundNode(source("video.fps"), { required: false })
+              ]
+            }),
+            createNode({
+              name: "annotations",
+              type: "array",
+              description: "按时间片段组织的标注结果",
+              children: [
+                createNode({
+                  name: "item",
+                  type: "object",
+                  children: [
+                    makeBoundNode(source("segment.segment_id")),
+                    makeBoundNode(source("segment.start_time")),
+                    makeBoundNode(source("segment.end_time")),
+                    makeBoundNode(source("event.event_type"), {
+                      enumValues: ["goal", "foul", "shot", "pass", "other"]
+                    }),
+                    makeBoundNode(source("event.event_description"), {
+                      name: "description"
+                    }),
+                    makeBoundNode(source("event.confidence"), {
+                      required: false,
+                      validations: "min:0,max:1"
+                    }),
+                    createNode({
+                      name: "objects",
+                      type: "array",
+                      required: false,
+                      description: "片段内出现的目标框",
+                      children: [
+                        createNode({
+                          name: "item",
+                          type: "object",
+                          children: [
+                            makeBoundNode(source("object.object_id")),
+                            makeBoundNode(source("object.label"), {
+                              enumValues: ["person", "car", "ball", "animal", "other"]
+                            }),
+                            makeBoundNode(source("object.bbox")),
+                            makeBoundNode(source("object.track_id"), { required: false })
+                          ]
+                        })
+                      ]
+                    })
+                  ]
+                })
+              ]
+            }),
+            makeBoundNode(source("text.summary"), {
+              name: "summary",
+              required: false,
+              description: "整段视频的摘要描述"
+            }),
+            createNode({
+              name: "qa_pairs",
+              type: "array",
+              required: false,
+              description: "视频问答结果",
+              children: [
+                createNode({
+                  name: "item",
+                  type: "object",
+                  children: [
+                    makeBoundNode(source("qa.question")),
+                    makeBoundNode(source("qa.answer"))
+                  ]
+                })
+              ]
+            })
+          ]
+        });
+      };
+
+      const TYPE_STYLES = {
+        object: "bg-slate-100 text-slate-700 border-slate-200",
+        array: "bg-indigo-50 text-indigo-700 border-indigo-100",
+        string: "bg-sky-50 text-sky-700 border-sky-100",
+        number: "bg-emerald-50 text-emerald-700 border-emerald-100",
+        boolean: "bg-teal-50 text-teal-700 border-teal-100",
+        enum: "bg-violet-50 text-violet-700 border-violet-100",
+        bbox: "bg-amber-50 text-amber-700 border-amber-100",
+        point: "bg-orange-50 text-orange-700 border-orange-100",
+        polygon: "bg-rose-50 text-rose-700 border-rose-100",
+        date: "bg-cyan-50 text-cyan-700 border-cyan-100",
+        time: "bg-lime-50 text-lime-700 border-lime-100"
+      };
+
+      function cloneTree(tree) {
+        return JSON.parse(JSON.stringify(tree));
+      }
+
+      function visitTree(node, callback, parent = null, depth = 0) {
+        callback(node, parent, depth);
+        node.children?.forEach((child) => visitTree(child, callback, node, depth + 1));
+      }
+
+      function findNode(node, id, parent = null) {
+        if (node.id === id) return { node, parent };
+        for (const child of node.children || []) {
+          const found = findNode(child, id, node);
+          if (found) return found;
+        }
+        return null;
+      }
+
+      function updateNode(tree, id, patch) {
+        const next = cloneTree(tree);
+        const found = findNode(next, id);
+        if (!found) return tree;
+        Object.assign(found.node, patch);
+        return next;
+      }
+
+      function addChildNode(tree, targetId, child) {
+        const next = cloneTree(tree);
+        const found = findNode(next, targetId);
+        if (!found) return tree;
+        const container = ["object", "array"].includes(found.node.type)
+          ? found.node
+          : found.parent || found.node;
+        container.children = container.children || [];
+        container.children.push(child);
+        return next;
+      }
+
+      function removeNodeById(tree, id) {
+        if (tree.id === id) return tree;
+        const next = cloneTree(tree);
+        let removed = false;
+        const walk = (node) => {
+          node.children = (node.children || []).filter((child) => {
+            if (child.id === id) {
+              removed = true;
+              return false;
+            }
+            return true;
+          });
+          node.children.forEach(walk);
+        };
+        walk(next);
+        return removed ? next : tree;
+      }
+
+      function moveNodeBefore(tree, draggedId, targetId) {
+        if (draggedId === targetId || draggedId === tree.id) return tree;
+        const next = cloneTree(tree);
+        let moving = null;
+        const removeFrom = (node) => {
+          const index = (node.children || []).findIndex((child) => child.id === draggedId);
+          if (index >= 0) {
+            moving = node.children.splice(index, 1)[0];
+            return true;
+          }
+          return node.children?.some(removeFrom);
+        };
+        removeFrom(next);
+        if (!moving) return tree;
+        const target = findNode(next, targetId);
+        if (!target?.parent) return tree;
+        const insertAt = target.parent.children.findIndex((child) => child.id === targetId);
+        target.parent.children.splice(insertAt, 0, moving);
+        return next;
+      }
+
+      function appendMovedNode(tree, draggedId, targetId) {
+        if (draggedId === targetId || draggedId === tree.id) return tree;
+        const next = cloneTree(tree);
+        const originalTarget = findNode(next, targetId);
+        if (!originalTarget || !["object", "array"].includes(originalTarget.node.type)) return tree;
+        let moving = null;
+        const removeFrom = (node) => {
+          const index = (node.children || []).findIndex((child) => child.id === draggedId);
+          if (index >= 0) {
+            moving = node.children.splice(index, 1)[0];
+            return true;
+          }
+          return node.children?.some(removeFrom);
+        };
+        removeFrom(next);
+        if (!moving) return tree;
+        const target = findNode(next, targetId);
+        target.node.children = target.node.children || [];
+        target.node.children.push(moving);
+        return next;
+      }
+
+      function parsePrimitiveValue(value, type) {
+        if (value === "" || value == null) return undefined;
+        if (type === "number") {
+          const parsed = Number(value);
+          return Number.isNaN(parsed) ? value : parsed;
+        }
+        if (type === "boolean") return value === true || value === "true";
+        if (["bbox", "point", "polygon"].includes(type)) {
+          try {
+            return JSON.parse(value);
+          } catch {
+            return value;
+          }
+        }
+        return value;
+      }
+
+      function sampleForNode(node) {
+        const bound = componentMap[`${node.componentId}.${node.fieldKey}`];
+        const explicit = parsePrimitiveValue(node.exampleValue, node.type);
+        if (explicit !== undefined) return explicit;
+        if (node.defaultValue !== "") return parsePrimitiveValue(node.defaultValue, node.type);
+        if (bound) return bound.sample;
+
+        const samples = {
+          string: "示例文本",
+          number: 123.45,
+          boolean: true,
+          enum: node.enumValues?.[0] || "option_a",
+          bbox: { x: 120, y: 80, width: 240, height: 180 },
+          point: { x: 320, y: 180 },
+          polygon: [
+            { x: 100, y: 120 },
+            { x: 180, y: 140 },
+            { x: 150, y: 220 }
+          ],
+          date: "2026-06-29",
+          time: "14:30:00"
+        };
+        return samples[node.type] ?? null;
+      }
+
+      function buildJsonExample(node) {
+        if (!node.exportable) return undefined;
+        if (node.type === "object") {
+          return (node.children || []).reduce((acc, child) => {
+            const value = buildJsonExample(child);
+            if (value !== undefined) acc[child.alias || child.name] = value;
+            return acc;
+          }, {});
+        }
+        if (node.type === "array") {
+          if (!node.children?.length) return [];
+          return [buildJsonExample(node.children[0])];
+        }
+        return sampleForNode(node);
+      }
+
+      function buildJsonlExample(value) {
+        const record = value && typeof value === "object" ? value : { value };
+        return [1, 2, 3]
+          .map((index) => {
+            const row = JSON.parse(JSON.stringify(record));
+            if (row && typeof row === "object" && !Array.isArray(row)) row.record_index = index;
+            return JSON.stringify(row);
+          })
+          .join("\n");
+      }
+      function importJsonToNode(name, value) {
+        if (Array.isArray(value)) {
+          return createNode({
+            name,
+            type: "array",
+            children: value.length ? [importJsonToNode("item", value[0])] : []
+          });
+        }
+        if (value && typeof value === "object") {
+          return createNode({
+            name,
+            type: "object",
+            children: Object.entries(value).map(([key, child]) => importJsonToNode(key, child))
+          });
+        }
+        const type = typeof value === "number" ? "number" : typeof value === "boolean" ? "boolean" : "string";
+        return createNode({
+          name,
+          type,
+          required: true,
+          exampleValue: String(value ?? "")
+        });
+      }
+
+      function collectValidation(tree) {
+        const results = [];
+        const nodeIssues = {};
+        const walk = (node, parent = null, path = node.name) => {
+          const current = [];
+          if (!node.name?.trim()) {
+            current.push({ level: "error", message: "字段名不能为空" });
+          }
+          if (node.type === "array" && (!node.children || node.children.length === 0)) {
+            current.push({ level: "error", message: "array 类型需要至少一个 item 结构" });
+          }
+          if (node.type === "enum" && (!node.enumValues || node.enumValues.length === 0)) {
+            current.push({ level: "error", message: "enum 类型需要配置枚举值" });
+          }
+          if (
+            !["root", "object", "array"].includes(node.type) &&
+            node.exportable &&
+            !node.componentId &&
+            !node.fieldKey
+          ) {
+            current.push({ level: "warning", message: "未绑定来源字段，导出时将使用类型占位数据" });
+          }
+          if (parent?.children?.length) {
+            const duplicateCount = parent.children.filter((child) => child.name === node.name).length;
+            if (node.name && duplicateCount > 1) {
+              current.push({ level: "error", message: "同级字段名重复" });
+            }
+          }
+          if (current.length) {
+            nodeIssues[node.id] = current;
+            current.forEach((issue) => results.push({ ...issue, path }));
+          }
+          (node.children || []).forEach((child) => walk(child, node, `${path}.${child.name || "未命名字段"}`));
+        };
+        walk(tree);
+        return { results, nodeIssues };
+      }
+
+      function flattenTree(tree) {
+        const list = [];
+        visitTree(tree, (node, parent, depth) => {
+          list.push({ node, parent, depth });
+        });
+        return list;
+      }
+
+      function Icon({ name, className = "h-4 w-4" }) {
+        return <i data-lucide={name} className={className} aria-hidden="true"></i>;
+      }
+
+      function Button({ children, icon, variant = "secondary", className = "", ...props }) {
+        const styles = {
+          primary: "bg-brand text-white border-brand hover:bg-blue-700",
+          secondary: "bg-white text-slate-700 border-line hover:bg-slate-50",
+          ghost: "bg-transparent text-slate-600 border-transparent hover:bg-slate-100",
+          danger: "bg-white text-rose-700 border-rose-200 hover:bg-rose-50",
+          success: "bg-mint text-white border-mint hover:bg-teal-700"
+        };
+        return (
+          <button
+            className={`inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition ${styles[variant]} ${className}`}
+            {...props}
+          >
+            {icon && <Icon name={icon} />}
+            <span className="truncate">{children}</span>
+          </button>
+        );
+      }
+
+      function TypeBadge({ type }) {
+        return (
+          <span
+            className={`inline-flex h-6 items-center rounded border px-2 text-xs font-medium ${TYPE_STYLES[type] || TYPE_STYLES.string}`}
+          >
+            {type}
+          </span>
+        );
+      }
+
+      function TopBar({
+        formatName,
+        onFormatNameChange,
+        outputFileName,
+        onOutputFileNameChange
+      }) {
+        const fileMeta = {
+          JSON: { label: "json文件名", extension: ".json" },
+          JSONL: { label: "jsonL文件名", extension: ".jsonl" },
+          EXCEL: { label: "Excel文件名", extension: ".xlsx" },
+          CSV: { label: "CSV文件名", extension: ".csv" }
+        }[formatName] || { label: "输出文件名", extension: "" };
+        const fileLabel = fileMeta.label;
+        const extension = fileMeta.extension;
+        const steps = [
+          { title: "第一步", desc: "标注数据模板" },
+          { title: "第二步", desc: "标注场景搭建" },
+          { title: "第三步", desc: "标注数据输出格式" }
+        ];
+
+        return (
+          <header className="border-b border-line bg-white">
+            <div className="bg-[#0d1426] px-3 py-1.5">
+              <div className="mx-auto max-w-[1800px] rounded-xl border border-[#263958] bg-[#11182a] px-4 py-2 shadow-[0_10px_28px_rgba(15,23,42,0.22)]">
+                <div className="mb-1.5 flex items-center gap-2 text-xs font-semibold text-slate-200">
+                  <span>自定义场景</span>
+                  <Icon name="chevron-right" className="h-3.5 w-3.5 text-slate-500" />
+                  <span>配置</span>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  {steps.map((step, index) => {
+                    const active = index === 2;
+                    const stepClassName = active
+                      ? "flex h-8 items-center rounded-lg border border-brand bg-[#1e3560] px-3 text-sm font-semibold text-[#d9e8ff] shadow-[inset_0_0_0_1px_rgba(37,99,235,0.22)] transition"
+                      : "flex h-8 items-center rounded-lg border border-[#263149] bg-[#171d2f] px-3 text-sm font-semibold text-slate-400 transition";
+                    return (
+                      <div key={step.title} className={stepClassName}>
+                        <span className={active ? "text-[#9fc3ff]" : "text-slate-500"}>{step.title}</span>
+                        <span className="ml-2 truncate">{step.desc}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+            <div className="mx-auto flex min-h-[44px] max-w-[1800px] flex-wrap items-center gap-4 px-5 py-1.5">
+              <label className="flex h-7 w-[180px] items-center gap-2 rounded-md border border-line bg-soft px-2.5">
+                <span className="shrink-0 text-sm text-slate-500">输出格式</span>
+                <select
+                  value={formatName}
+                  onChange={(event) => onFormatNameChange(event.target.value)}
+                  className="w-full bg-transparent text-sm font-medium text-ink outline-none"
+                >
+                  <option value="JSON">JSON</option>
+                  <option value="JSONL">JSONL</option>
+                  <option value="EXCEL">Excel</option>
+                  <option value="CSV">CSV</option>
+                </select>
+              </label>
+              <label className="flex h-8 min-w-[440px] items-center gap-2">
+                <span className="flex shrink-0 items-center text-sm font-medium text-slate-700">
+                  <span className="mr-0.5 text-red-500">*</span>{fileLabel}
+                </span>
+                <div className="flex h-8 min-w-0 flex-1 items-center overflow-hidden rounded-md border border-line bg-white focus-within:border-brand focus-within:ring-2 focus-within:ring-blue-100">
+                  <input
+                    value={outputFileName}
+                    required
+                    onChange={(event) => onOutputFileNameChange(event.target.value.replace(/\s/g, ""))}
+                    className="min-w-0 flex-1 bg-transparent px-3 text-sm font-medium text-ink outline-none placeholder:text-slate-400"
+                    placeholder="可输入中英文、数字、特殊字符（空格除外）"
+                  />
+                  <span className="flex h-full shrink-0 items-center border-l border-line bg-soft px-2.5 text-sm font-semibold text-slate-500">{extension}</span>
+                </div>
+              </label>
+            </div>
+          </header>
+        );
+      }
+
+      function BottomActionBar({ onPrevious, onSave }) {
+        return (
+          <footer className="fixed bottom-4 right-4 z-50 flex items-center rounded-xl border border-line bg-white/95 px-3 py-2 shadow-[0_16px_44px_rgba(15,23,42,0.16)] backdrop-blur">
+            <div className="flex items-center justify-end gap-2">
+              <Button icon="arrow-left" onClick={onPrevious}>
+                上一步
+              </Button>
+              <Button icon="save" variant="primary" onClick={onSave}>
+                保存
+              </Button>
+            </div>
+          </footer>
+        );
+      }
+
+      function TreeToolbar({ selectedNode, onAdd, onDelete, onToggleCollapse, onRecommend, formatName }) {
+        const isJsonl = formatName === "JSONL";
+        return (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-white px-4 py-1.5">
+            <div className="flex min-w-0 items-center gap-2">
+              <h2 className="shrink-0 text-sm font-semibold text-ink">{isJsonl ? "JSONL 单行记录结构" : "JSON 可视化结构"}</h2>
+              <span className="truncate text-xs text-slate-500">{isJsonl ? "配置单条记录字段，导出时每行生成一条独立 JSON 数据。" : "添加字段、嵌套 object/array，并拖拽调整顺序。"}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button icon="braces" onClick={() => onAdd("object")}>
+                Object
+              </Button>
+              <Button icon="list-tree" onClick={() => onAdd("array")}>
+                Array
+              </Button>
+              <Button icon="plus" onClick={() => onAdd("string")}>
+                字段
+              </Button>
+              <Button
+                icon="trash-2"
+                variant="danger"
+                onClick={onDelete}
+                disabled={!selectedNode || selectedNode.name === "root"}
+              >
+                删除
+              </Button>
+            </div>
+          </div>
+        );
+      }
+
+      function TreeNode({
+        node,
+        depth,
+        selectedId,
+        issues,
+        onSelect,
+        onDropField,
+        onDropTree,
+        onAppendTree,
+        onDragTree,
+        onToggleNode
+      }) {
+        const [over, setOver] = useState(false);
+        const hasChildren = node.children?.length > 0;
+        const nodeIssues = issues[node.id] || [];
+        const hasError = nodeIssues.some((item) => item.level === "error");
+        const hasWarning = nodeIssues.some((item) => item.level === "warning");
+        const bound = componentMap[`${node.componentId}.${node.fieldKey}`];
+
+        const handleDrop = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setOver(false);
+          const raw = event.dataTransfer.getData("application/json");
+          if (!raw) return;
+          const payload = JSON.parse(raw);
+          if (payload.kind === "palette") onDropField(node.id, payload);
+          if (payload.kind === "tree") onDropTree(payload.nodeId, node.id);
+        };
+
+        const handleAppendDrop = (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setOver(false);
+          const raw = event.dataTransfer.getData("application/json");
+          if (!raw) return;
+          const payload = JSON.parse(raw);
+          if (payload.kind === "palette") onDropField(node.id, payload);
+          if (payload.kind === "tree") onAppendTree(payload.nodeId, node.id);
+        };
+
+        return (
+          <div className="tree-line">
+            <div
+              draggable={node.name !== "root"}
+              onDragStart={(event) => onDragTree(event, node)}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setOver(true);
+              }}
+              onDragLeave={() => setOver(false)}
+              onDrop={handleDrop}
+              onClick={() => onSelect(node.id)}
+              className={`group flex min-h-[42px] cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 transition ${
+                selectedId === node.id
+                  ? "border-blue-300 bg-blue-50"
+                  : over
+                    ? "border-blue-300 bg-blue-50"
+                    : "border-transparent bg-white hover:border-slate-200 hover:bg-slate-50"
+              }`}
+              style={{ marginLeft: `${depth * 22}px` }}
+            >
+              <button
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-500 hover:bg-slate-100"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onToggleNode(node.id);
+                }}
+              >
+                {hasChildren ? (
+                  <Icon name={node.collapsed ? "chevron-right" : "chevron-down"} />
+                ) : (
+                  <Icon name="dot" />
+                )}
+              </button>
+              <Icon name="grip-vertical" className="hidden h-4 w-4 shrink-0 text-slate-400 group-hover:block" />
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="truncate text-sm font-semibold text-ink">{node.name || "未命名字段"}</span>
+                  <TypeBadge type={node.type} />
+                  {node.required && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">必填</span>}
+                  {bound && (
+                    <span className="inline-flex max-w-[220px] items-center gap-1 truncate rounded bg-emerald-50 px-1.5 py-0.5 text-xs text-emerald-700">
+                      <Icon name="link" className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{bound.componentName}.{bound.fieldLabel}</span>
+                    </span>
+                  )}
+                  {hasError && (
+                    <span className="inline-flex items-center gap-1 rounded bg-rose-50 px-1.5 py-0.5 text-xs text-rose-700">
+                      <Icon name="circle-alert" className="h-3 w-3" />
+                      错误
+                    </span>
+                  )}
+                  {!hasError && hasWarning && (
+                    <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-xs text-amber-700">
+                      <Icon name="triangle-alert" className="h-3 w-3" />
+                      警告
+                    </span>
+                  )}
+                </div>
+                {node.description && <div className="mt-0.5 truncate text-xs text-slate-500">{node.description}</div>}
+              </div>
+              <span className="hidden text-xs text-slate-400 group-hover:block">拖拽排序</span>
+            </div>
+
+            {["object", "array"].includes(node.type) && !node.collapsed && (
+              <div
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={handleAppendDrop}
+                className="ml-6 min-h-[10px] rounded-md"
+              >
+                {hasChildren ? (
+                  node.children.map((child) => (
+                    <TreeNode
+                      key={child.id}
+                      node={child}
+                      depth={depth + 1}
+                      selectedId={selectedId}
+                      issues={issues}
+                      onSelect={onSelect}
+                      onDropField={onDropField}
+                      onDropTree={onDropTree}
+                      onAppendTree={onAppendTree}
+                      onDragTree={onDragTree}
+                      onToggleNode={onToggleNode}
+                    />
+                  ))
+                ) : (
+                  <div
+                    className="mt-2 flex h-12 items-center justify-center rounded-md border border-dashed border-slate-300 bg-slate-50 text-xs text-slate-500"
+                    style={{ marginLeft: `${(depth + 1) * 22}px` }}
+                  >
+                    拖入字段或添加子字段
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      function JsonTreePanel({
+        tree,
+        selectedId,
+        issues,
+        onSelect,
+        onAdd,
+        onDelete,
+        onDropField,
+        onDropTree,
+        onAppendTree,
+        onDragTree,
+        onToggleCollapse,
+        onToggleNode,
+        onRecommend,
+        formatName
+      }) {
+        const selectedNode = findNode(tree, selectedId)?.node;
+        return (
+          <main className="flex min-h-0 flex-col bg-soft">
+            <TreeToolbar
+              selectedNode={selectedNode}
+              onAdd={onAdd}
+              onDelete={onDelete}
+              onToggleCollapse={onToggleCollapse}
+              onRecommend={onRecommend}
+              formatName={formatName}
+            />
+            <div className="scrollbar-thin min-h-0 flex-1 overflow-auto p-4">
+              {formatName === "JSONL" && (
+                <div className="mb-3 flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800">
+                  <Icon name="list" className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>当前配置定义 JSONL 的单条记录。最终文件会将每条标注数据输出为独立的一行 JSON，不使用外层数组包装。</span>
+                </div>
+              )}
+              <div className="rounded-md border border-line bg-white p-3 shadow-sm">
+                <TreeNode
+                  node={tree}
+                  depth={0}
+                  selectedId={selectedId}
+                  issues={issues}
+                  onSelect={onSelect}
+                  onDropField={onDropField}
+                  onDropTree={onDropTree}
+                  onAppendTree={onAppendTree}
+                  onDragTree={onDragTree}
+                  onToggleNode={onToggleNode}
+                />
+              </div>
+            </div>
+          </main>
+        );
+      }
+
+      function PropertyPanel({ node, onUpdate }) {
+        if (!node) {
+          return (
+            <section className="flex h-[260px] shrink-0 flex-col border-t border-line bg-white">
+              <div className="border-b border-line px-4 py-2">
+                <h2 className="text-sm font-semibold text-ink">字段属性</h2>
+              </div>
+              <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-slate-500">
+                选择中间树中的字段后，在这里配置导出规则。
+              </div>
+            </section>
+          );
+        }
+
+        return (
+          <section className="flex h-[260px] shrink-0 flex-col border-t border-line bg-white">
+            <div className="flex min-h-[45px] items-center justify-between border-b border-line px-4 py-1.5">
+              <h2 className="text-sm font-semibold text-ink">字段属性配置</h2>
+              <TypeBadge type={node.type} />
+            </div>
+            <div className="scrollbar-thin min-h-0 flex-1 space-y-4 overflow-auto p-4">
+              <div className="grid grid-cols-[minmax(140px,1fr)_160px_minmax(220px,2fr)] gap-3">
+                <label className="block min-w-0">
+                  <span className="mb-1 block text-xs font-medium text-slate-600">字段名称</span>
+                  <input
+                    value={node.name}
+                    disabled={node.name === "root"}
+                    onChange={(event) => onUpdate({ name: event.target.value })}
+                    className="h-9 w-full rounded-md border border-line bg-white px-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50"
+                  />
+                </label>
+
+                <label className="block min-w-0">
+                  <span className="mb-1 block text-xs font-medium text-slate-600">字段类型</span>
+                  <select
+                    value={node.type}
+                    disabled={node.name === "root"}
+                    onChange={(event) => onUpdate({ type: event.target.value })}
+                    className="h-9 w-full rounded-md border border-line bg-white px-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50"
+                  >
+                    {FIELD_TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block min-w-0">
+                  <span className="mb-1 block text-xs font-medium text-slate-600">字段说明</span>
+                  <textarea
+                    value={node.description}
+                    onChange={(event) => onUpdate({ description: event.target.value })}
+                    rows="1"
+                    className="h-9 w-full resize-none rounded-md border border-line bg-white px-2 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-blue-100"
+                    placeholder="说明字段含义、导出约定或标注口径"
+                  ></textarea>
+                </label>
+              </div>
+
+              {node.type === "enum" && (
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-slate-600">枚举值配置</span>
+                  <textarea
+                    value={(node.enumValues || []).join("\n")}
+                    onChange={(event) =>
+                      onUpdate({
+                        enumValues: event.target.value
+                          .split("\n")
+                          .map((item) => item.trim())
+                          .filter(Boolean)
+                      })
+                    }
+                    rows="4"
+                    className="code-block w-full resize-none rounded-md border border-line bg-white px-2 py-2 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-blue-100"
+                    placeholder={"goal\nfoul\nother"}
+                  ></textarea>
+                </label>
+              )}
+            </div>
+          </section>
+        );
+      }
+
+      function PreviewPanel({ jsonExample, validationResults, onCopy, onValidate, formatName }) {
+        const isJsonl = formatName === "JSONL";
+        const codeContent = isJsonl ? buildJsonlExample(jsonExample) : JSON.stringify(jsonExample, null, 2);
+
+        return (
+          <aside className="flex min-h-0 flex-col border-r border-line bg-white">
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-line px-4">
+                <div className="flex min-w-0 items-center gap-2 text-slate-700">
+                  <Icon name="braces" />
+                  <span className="truncate text-xs font-semibold">{isJsonl ? "JSONL 示例预览" : "JSON 示例预览"}</span>
+                  <span title={validationResults.length ? "发现待处理项" : "结构校验通过"} className={validationResults.length ? "shrink-0 text-amber-500" : "shrink-0 text-emerald-500"}><Icon name={validationResults.length ? "triangle-alert" : "circle-check"} /></span>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Button icon="shield-check" onClick={onValidate}>校验结果</Button>
+                  <Button icon="copy" onClick={() => onCopy(codeContent)}>复制</Button>
+                </div>
+              </div>
+              <div className="scrollbar-thin min-h-0 flex-1 overflow-auto bg-slate-950 p-4 text-sm text-slate-100">
+                <pre className="code-block whitespace-pre-wrap break-words leading-6">{codeContent}</pre>
+              </div>
+            </div>
+          </aside>
+        );
+      }
+
+      function TableOutputDesigner({ formatName, columns, onColumnsChange, selectedColumnId, onSelectColumn, onNotify }) {
+        const [searchTerm, setSearchTerm] = useState("");
+        const [draggedColumnId, setDraggedColumnId] = useState("");
+        const selectedColumn = columns.find((column) => column.id === selectedColumnId) || columns[0] || null;
+        const filteredColumns = columns.filter((column) => column.name.toLowerCase().includes(searchTerm.trim().toLowerCase()));
+
+        const updateColumn = (columnId, patch) => onColumnsChange(columns.map((column) => column.id === columnId ? { ...column, ...patch } : column));
+        const addColumn = () => {
+          const next = createTableColumn();
+          onColumnsChange([...columns, next]);
+          onSelectColumn(next.id);
+          onNotify?.("字段已添加");
+        };
+        const duplicateColumn = () => {
+          if (!selectedColumn) return;
+          const copy = { ...selectedColumn, id: `col_${Date.now()}_copy`, name: `${selectedColumn.name}_copy` };
+          const index = columns.findIndex((column) => column.id === selectedColumn.id);
+          const next = [...columns];
+          next.splice(index + 1, 0, copy);
+          onColumnsChange(next);
+          onSelectColumn(copy.id);
+          onNotify?.("字段已复制");
+        };
+        const deleteColumn = () => {
+          if (!selectedColumn) return;
+          const index = columns.findIndex((column) => column.id === selectedColumn.id);
+          const next = columns.filter((column) => column.id !== selectedColumn.id);
+          onColumnsChange(next);
+          onSelectColumn(next[Math.min(index, next.length - 1)]?.id || "");
+          onNotify?.("字段已删除");
+        };
+        const moveColumnBefore = (targetId) => {
+          if (!draggedColumnId || draggedColumnId === targetId) return;
+          const moving = columns.find((column) => column.id === draggedColumnId);
+          if (!moving) return;
+          const next = columns.filter((column) => column.id !== draggedColumnId);
+          const targetIndex = next.findIndex((column) => column.id === targetId);
+          if (targetIndex < 0) return;
+          next.splice(targetIndex, 0, moving);
+          onColumnsChange(next);
+          onSelectColumn(moving.id);
+          setDraggedColumnId("");
+          onNotify?.("字段顺序已调整");
+        };
+
+        return (
+          <div className="flex h-full min-h-0 flex-col bg-soft">
+            <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <div className="flex min-h-[54px] flex-wrap items-center justify-between gap-2 border-b border-line bg-white px-4 py-2">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm font-semibold text-ink">{formatName === "EXCEL" ? "Excel" : "CSV"} 可视化表格</h2>
+                      <span className="rounded bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">{columns.length} 个字段</span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-slate-500">表头即输出字段，选择列后可在底部配置属性与组件关联</p>
+                  </div>
+                  <label className="ml-3 flex h-8 w-[220px] items-center gap-2 rounded-md border border-line bg-slate-50 px-2.5">
+                    <Icon name="search" className="h-4 w-4 text-slate-400" />
+                    <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} className="min-w-0 flex-1 bg-transparent text-xs outline-none" placeholder="查找字段" />
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button icon="plus" variant="primary" onClick={addColumn}>添加字段</Button>
+                  <Button icon="copy" onClick={duplicateColumn} disabled={!selectedColumn}>复制</Button>
+                  <Button icon="trash-2" variant="danger" onClick={deleteColumn} disabled={!selectedColumn}>删除</Button>
+                </div>
+              </div>
+              <div className="scrollbar-thin min-h-0 flex-1 overflow-auto p-4">
+                <div className="min-w-max overflow-hidden rounded-md border border-line bg-white shadow-sm">
+                  <table className="border-collapse text-left text-xs">
+                    <thead>
+                      <tr>
+                        <th className="sticky left-0 z-20 h-[78px] w-12 min-w-12 border-b border-r border-line bg-slate-100 text-center font-semibold text-slate-500">#</th>
+                        {filteredColumns.map((column) => {
+                          const source = componentMap[`${column.componentId}.${column.fieldKey}`];
+                          const selected = column.id === selectedColumn?.id;
+                          return (
+                            <th
+                              key={column.id}
+                              draggable
+                              onDragStart={(event) => {
+                                event.dataTransfer.effectAllowed = "move";
+                                event.dataTransfer.setData("text/plain", column.id);
+                                setDraggedColumnId(column.id);
+                              }}
+                              onDragOver={(event) => {
+                                event.preventDefault();
+                                event.dataTransfer.dropEffect = "move";
+                              }}
+                              onDrop={(event) => {
+                                event.preventDefault();
+                                moveColumnBefore(column.id);
+                              }}
+                              onDragEnd={() => setDraggedColumnId("")}
+                              onClick={() => onSelectColumn(column.id)}
+                              className={`h-[78px] min-w-[190px] cursor-grab border-b border-r px-3 py-2 align-top transition active:cursor-grabbing ${draggedColumnId === column.id ? "opacity-45" : ""} ${selected ? "border-blue-300 bg-blue-50" : "border-line bg-slate-50 hover:bg-slate-100"}`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex min-w-0 items-center gap-1.5">
+                                  <Icon name="grip-vertical" className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                                  <span className="truncate font-semibold text-ink">{column.required && <span className="mr-0.5 text-rose-500">*</span>}{column.name}</span>
+                                </div>
+                                <span className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-500">{column.type}</span>
+                              </div>
+                              <div className={`mt-2 flex items-center gap-1.5 truncate rounded px-2 py-1 text-[11px] ${source ? "bg-emerald-50 text-emerald-700" : column.system ? "bg-sky-50 text-sky-700" : "bg-amber-50 text-amber-700"}`}>
+                                <Icon name={source ? "link" : column.system ? "database" : "triangle-alert"} className="h-3 w-3 shrink-0" />
+                                <span className="truncate">{source ? `${source.componentName}.${source.fieldLabel}` : column.system ? "系统字段" : "未关联组件字段"}</span>
+                              </div>
+                            </th>
+                          );
+                        })}
+                        <th className="h-[78px] min-w-[130px] border-b border-line bg-slate-50 px-3">
+                          <button type="button" onClick={addColumn} className="flex w-full items-center justify-center gap-1.5 rounded border border-dashed border-slate-300 py-2 text-xs font-medium text-slate-500 hover:border-blue-300 hover:text-blue-600"><Icon name="plus" className="h-3.5 w-3.5" />添加字段</button>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[0, 1, 2, 3].map((rowIndex) => (
+                        <tr key={rowIndex} className="hover:bg-blue-50/30">
+                          <td className="sticky left-0 z-10 h-11 border-b border-r border-line bg-slate-50 text-center font-medium text-slate-400">{rowIndex + 1}</td>
+                          {filteredColumns.map((column) => (
+                            <td key={column.id} className={`max-w-[260px] border-b border-r px-3 text-slate-600 ${column.id === selectedColumn?.id ? "border-blue-200 bg-blue-50/40" : "border-line"}`}>&nbsp;</td>
+                          ))}
+                          <td className="border-b border-line bg-slate-50/50"></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {!filteredColumns.length && <div className="mt-4 flex h-32 items-center justify-center rounded-md border border-dashed border-slate-300 bg-white text-sm text-slate-500">没有匹配的字段</div>}
+              </div>
+            </main>
+
+            <section className="h-[196px] shrink-0 border-t border-line bg-white">
+              <div className="flex h-11 items-center justify-between border-b border-line px-4">
+                <div className="flex items-center gap-2"><h2 className="text-sm font-semibold text-ink">字段属性配置</h2>{selectedColumn && <span className="rounded bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">{selectedColumn.name}</span>}</div>
+                <span className="text-xs text-slate-500">横向配置表头与字段信息</span>
+              </div>
+              {selectedColumn ? (
+                            <div className="grid grid-cols-[minmax(220px,1fr)_180px_minmax(320px,2fr)] gap-3 px-4 py-3">
+                  <label className="block min-w-0"><span className="mb-1 block text-xs font-medium text-slate-600"><span className="mr-0.5 text-rose-500">*</span>字段名称</span><input value={selectedColumn.name} onChange={(event) => updateColumn(selectedColumn.id, { name: event.target.value })} className="h-9 w-full rounded-md border border-line px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-blue-100" /></label>
+                  <label className="block min-w-0"><span className="mb-1 block text-xs font-medium text-slate-600">字段类型</span><select value={selectedColumn.type} onChange={(event) => updateColumn(selectedColumn.id, { type: event.target.value })} className="h-9 w-full rounded-md border border-line px-3 text-sm outline-none focus:border-brand">{FIELD_TYPES.filter((type) => !["object", "array"].includes(type)).map((type) => <option key={type}>{type}</option>)}</select></label>
+                  <label className="block min-w-0"><span className="mb-1 block text-xs font-medium text-slate-600">字段说明</span><input value={selectedColumn.description} onChange={(event) => updateColumn(selectedColumn.id, { description: event.target.value })} className="h-9 w-full rounded-md border border-line px-3 text-sm outline-none focus:border-brand" placeholder="请输入字段说明" /></label>
+                </div>
+              ) : <div className="flex h-[150px] items-center justify-center text-sm text-slate-500">添加或选择一个字段后开始配置</div>}
+            </section>
+          </div>
+        );
+      }
+      function DeleteConfirmDialog({ target, onCancel, onConfirm }) {
+        if (!target) return null;
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/35 px-4">
+            <div className="w-full max-w-[420px] rounded-md border border-line bg-white shadow-shell">
+              <div className="flex items-center gap-2 border-b border-line px-4 py-3">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-rose-50 text-rose-600">
+                  <Icon name="triangle-alert" className="h-4 w-4" />
+                </span>
+                <div>
+                  <div className="text-sm font-semibold text-ink">确认删除字段</div>
+                  <div className="mt-0.5 text-xs text-slate-500">该操作会从当前 JSON 结构中移除字段。</div>
+                </div>
+              </div>
+              <div className="space-y-2 px-4 py-4 text-sm text-slate-600">
+                <p>
+                  确定要删除 <span className="font-semibold text-ink">{target.name}</span> 吗？
+                </p>
+                {target.childCount > 0 && (
+                  <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    该字段包含 {target.childCount} 个子字段，确认后会一起删除。
+                  </p>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 border-t border-line px-4 py-3">
+                <Button icon="x" onClick={onCancel}>取消</Button>
+                <Button icon="trash-2" variant="danger" onClick={onConfirm}>确认删除</Button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      function Toast({ toast }) {
+        if (!toast) return null;
+        return (
+          <div className="fixed right-5 top-20 z-50 flex items-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-shell">
+            <Icon name={toast.type === "error" ? "circle-alert" : "circle-check"} className={`h-4 w-4 ${toast.type === "error" ? "text-rose-600" : "text-emerald-600"}`} />
+            {toast.message}
+          </div>
+        );
+      }
+
+      function App() {
+        const [tree, setTree] = useState(() => {
+          const saved = localStorage.getItem("json-config-tree");
+          if (saved) {
+            try {
+              return ensureTableSystemColumns(JSON.parse(saved));
+            } catch {
+              return makeRecommendedTree();
+            }
+          }
+          return makeRecommendedTree();
+        });
+        const [selectedId, setSelectedId] = useState(tree.id);
+        const [formatName, setFormatName] = useState(() => {
+          const savedOutputFormat = localStorage.getItem("json-output-format");
+          if (savedOutputFormat) return savedOutputFormat;
+          const legacyFormat = localStorage.getItem("json-config-name") || "JSON";
+          return legacyFormat === "JSONL" ? "JSON" : legacyFormat;
+        });
+        const [outputFileName, setOutputFileName] = useState(() => localStorage.getItem("json-output-file-name") || localStorage.getItem("jsonl-file-name") || "");
+        const [activeTab, setActiveTab] = useState("json");
+        const [toast, setToast] = useState(null);
+        const [deleteTarget, setDeleteTarget] = useState(null);
+        const [tableColumns, setTableColumns] = useState(() => {
+          const saved = localStorage.getItem("table-output-columns");
+          if (saved) {
+            try {
+              return ensureTableSystemColumns(JSON.parse(saved));
+            } catch {
+              return makeDefaultTableColumns();
+            }
+          }
+          return makeDefaultTableColumns();
+        });
+        const [selectedTableColumnId, setSelectedTableColumnId] = useState(() => makeDefaultTableColumns()[0].id);
+
+        useEffect(() => {
+          if (window.lucide) window.lucide.createIcons();
+        });
+
+        useEffect(() => {
+          if (!findNode(tree, selectedId)) setSelectedId(tree.id);
+        }, [tree, selectedId]);
+
+        useEffect(() => {
+          if (!toast) return;
+          const timer = setTimeout(() => setToast(null), 2200);
+          return () => clearTimeout(timer);
+        }, [toast]);
+
+        const selectedNode = useMemo(() => findNode(tree, selectedId)?.node, [tree, selectedId]);
+        const validation = useMemo(() => collectValidation(tree), [tree]);
+        const jsonExample = useMemo(() => buildJsonExample(tree), [tree]);
+
+        const showToast = (message, type = "success") => setToast({ message, type });
+
+        const handlePaletteDrag = (event, component, field) => {
+          event.dataTransfer.effectAllowed = "copy";
+          event.dataTransfer.setData(
+            "application/json",
+            JSON.stringify({
+              kind: "palette",
+              componentId: component.id,
+              componentName: component.name,
+              fieldKey: field.key,
+              fieldLabel: field.label,
+              type: field.type,
+              sample: field.sample
+            })
+          );
+        };
+
+        const handleDropField = (targetId, payload) => {
+          const child = makeBoundNode(payload);
+          setTree((current) => addChildNode(current, targetId, child));
+          setSelectedId(child.id);
+        };
+
+        const handleDragTree = (event, node) => {
+          event.dataTransfer.effectAllowed = "move";
+          event.dataTransfer.setData("application/json", JSON.stringify({ kind: "tree", nodeId: node.id }));
+        };
+
+        const addNode = (type) => {
+          const child = createNode({
+            name: type === "object" ? "new_object" : type === "array" ? "new_array" : "new_field",
+            type,
+            required: type !== "object" && type !== "array",
+            children:
+              type === "array"
+                ? [createNode({ name: "item", type: "object", required: true, children: [] })]
+                : []
+          });
+          setTree((current) => addChildNode(current, selectedId, child));
+          setSelectedId(child.id);
+        };
+
+        const updateSelected = (patch) => {
+          setTree((current) => updateNode(current, selectedId, patch));
+        };
+
+        const requestDeleteSelected = () => {
+          if (!selectedNode || selectedId === tree.id) return;
+          setDeleteTarget({
+            id: selectedNode.id,
+            name: selectedNode.name || "未命名字段",
+            childCount: selectedNode.children?.length || 0
+          });
+        };
+
+        const confirmDeleteSelected = () => {
+          if (!deleteTarget || deleteTarget.id === tree.id) return;
+          const found = findNode(tree, deleteTarget.id);
+          if (!found) {
+            setDeleteTarget(null);
+            return;
+          }
+          setTree((current) => removeNodeById(current, deleteTarget.id));
+          setSelectedId(found.parent?.id || tree.id);
+          setDeleteTarget(null);
+          showToast("字段已删除");
+        };
+
+        const toggleSelectedCollapse = () => {
+          if (!selectedNode) return;
+          updateSelected({ collapsed: !selectedNode.collapsed });
+        };
+
+        const toggleNode = (nodeId) => {
+          const node = findNode(tree, nodeId)?.node;
+          if (!node) return;
+          setTree((current) => updateNode(current, nodeId, { collapsed: !node.collapsed }));
+        };
+
+        const generateRecommend = () => {
+          const next = makeRecommendedTree();
+          setTree(next);
+          setSelectedId(next.id);
+          setActiveTab("json");
+          showToast("已生成视频理解场景推荐结构");
+        };
+
+        const importJson = async (file) => {
+          try {
+            const text = await file.text();
+            const parsed = JSON.parse(text);
+            const rootNode = importJsonToNode("root", parsed);
+            setTree(rootNode.type === "object" ? rootNode : createNode({ name: "root", type: "object", children: [rootNode] }));
+            setSelectedId(rootNode.id);
+            showToast("JSON 已导入并转换为可视化结构");
+          } catch (error) {
+            showToast("导入失败，请检查 JSON 文件格式", "error");
+          }
+        };
+
+        const validateNow = () => {
+          showToast(validation.results.length ? "发现结构问题，请查看校验结果" : "结构校验通过", validation.results.length ? "error" : "success");
+        };
+
+        const saveConfig = () => {
+          if (!outputFileName.trim()) {
+            showToast(`请填写 ${formatName === "EXCEL" ? "Excel" : formatName}文件名`, "error");
+            return;
+          }
+          localStorage.setItem("json-config-tree", JSON.stringify(tree));
+          localStorage.setItem("json-config-name", formatName);
+          localStorage.setItem("json-output-format", formatName);
+          localStorage.setItem("json-output-file-name", outputFileName);
+          if (["EXCEL", "CSV"].includes(formatName)) {
+            localStorage.setItem("table-output-columns", JSON.stringify(tableColumns));
+          }
+          showToast(`当前 ${formatName} 配置已保存到本地`);
+        };
+
+        const goPrevious = () => {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: "annotation-builder:back-to-builder" }, "*");
+            return;
+          }
+          showToast("返回第二步：标注场景搭建");
+        };
+
+        const copyText = async (content) => {
+          try {
+            await navigator.clipboard.writeText(content);
+            showToast("内容已复制");
+          } catch {
+            showToast("复制失败，请手动选择代码内容", "error");
+          }
+        };
+
+        return (
+          <div className="flex h-screen min-w-[900px] flex-col overflow-hidden">
+            <TopBar
+              formatName={formatName}
+              onFormatNameChange={(nextFormat) => { setFormatName(nextFormat); setActiveTab("json"); }}
+              outputFileName={outputFileName}
+              onOutputFileNameChange={setOutputFileName}
+            />
+                        <div className="min-h-0 flex-1">
+              {["EXCEL", "CSV"].includes(formatName) ? (
+                <TableOutputDesigner
+                  formatName={formatName}
+                  columns={tableColumns}
+                  onColumnsChange={setTableColumns}
+                  selectedColumnId={selectedTableColumnId}
+                  onSelectColumn={setSelectedTableColumnId}
+                  onNotify={showToast}
+                />
+              ) : (
+                <div className="grid h-full grid-cols-[360px_minmax(620px,1fr)]">
+                  <PreviewPanel
+                    jsonExample={jsonExample}
+                    validationResults={validation.results}
+                    onCopy={copyText}
+                    onValidate={validateNow}
+                    formatName={formatName}
+                  />
+                  <div className="flex min-h-0 flex-col">
+                    <JsonTreePanel
+                      tree={tree}
+                      selectedId={selectedId}
+                      issues={validation.nodeIssues}
+                      onSelect={setSelectedId}
+                      onAdd={addNode}
+                      onDelete={requestDeleteSelected}
+                      onDropField={handleDropField}
+                      onDropTree={(draggedId, targetId) => setTree((current) => moveNodeBefore(current, draggedId, targetId))}
+                      onAppendTree={(draggedId, targetId) => setTree((current) => appendMovedNode(current, draggedId, targetId))}
+                      onDragTree={handleDragTree}
+                      onToggleCollapse={toggleSelectedCollapse}
+                      onToggleNode={toggleNode}
+                      onRecommend={generateRecommend}
+                      formatName={formatName}
+                    />
+                    <PropertyPanel node={selectedNode} onUpdate={updateSelected} />
+                  </div>
+                </div>
+              )}
+            </div><BottomActionBar onPrevious={goPrevious} onSave={saveConfig} />
+            <DeleteConfirmDialog
+              target={deleteTarget}
+              onCancel={() => setDeleteTarget(null)}
+              onConfirm={confirmDeleteSelected}
+            />
+            <Toast toast={toast} />
+          </div>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>
+  </body>
+</html>
